@@ -1,6 +1,6 @@
 {
   "name": "bases-lanes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lanes timeline view for Obsidian Bases: rows from native group-by, list values split into multiple rows.",
   "main": "main.js",
   "scripts": {

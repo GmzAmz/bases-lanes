@@ -420,7 +420,7 @@
 
 /* ---- Create by dragging on an empty row ---- */
 .bl-lane-track {
-	cursor: crosshair;
+	cursor: default;
 }
 .bl-create-preview {
 	position: absolute;
