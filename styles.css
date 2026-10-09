@@ -1,0 +1,433 @@
+.bl-root {
+	--bl-label-width: 160px;
+	--bl-axis-row: 22px;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	user-select: none;
+	font-size: var(--font-ui-small);
+}
+
+/* ---- Axis ---- */
+.bl-header {
+	display: flex;
+	flex: none;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+}
+.bl-corner {
+	flex: none;
+	width: var(--bl-label-width);
+	border-right: 1px solid var(--background-modifier-border);
+}
+.bl-axis {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	height: calc(var(--bl-axis-row) * 2);
+	overflow: hidden;
+}
+.bl-axis-major,
+.bl-axis-minor {
+	position: relative;
+	height: var(--bl-axis-row);
+}
+.bl-tick {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	padding: 2px 4px;
+	white-space: nowrap;
+	color: var(--text-muted);
+	border-left: 1px solid var(--background-modifier-border);
+}
+.bl-tick-major {
+	overflow: hidden;
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+}
+.bl-tick-major > span {
+	display: inline-block;
+}
+
+/* ---- Body ---- */
+.bl-body {
+	flex: 1;
+	overflow-x: hidden;
+	overflow-y: auto;
+	cursor: grab;
+}
+.bl-body.is-panning {
+	cursor: grabbing;
+}
+.bl-lanes {
+	position: relative;
+	min-height: 100%;
+}
+.bl-grid {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: var(--bl-label-width);
+	right: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+.bl-gridline {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-left: 1px solid var(--background-modifier-border);
+	opacity: 0.5;
+}
+.bl-gridline-major {
+	opacity: 1;
+}
+.bl-weekend {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	/* A touch of the text color: lighter on dark themes, darker on light ones. */
+	background: color-mix(in srgb, var(--text-normal) 5%, transparent);
+}
+.bl-today {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-left: 2px solid var(--color-red);
+	z-index: 1;
+}
+
+.bl-lane {
+	position: relative;
+	display: flex;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.bl-lane-label {
+	flex: none;
+	width: var(--bl-label-width);
+	padding: 6px 8px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--font-semibold);
+	border-right: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	cursor: default;
+}
+.bl-lane-track {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+}
+/* Bars sit on this layer; panning moves it with a transform instead of re-laying out bars. */
+.bl-lane-canvas {
+	position: absolute;
+	inset: 0;
+	transform-origin: 0 0;
+	will-change: transform;
+}
+
+.bl-item {
+	/* Keep each bar's layout self-contained: resizing one never re-lays out its neighbours. */
+	contain: layout style;
+	position: absolute;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+	border-radius: var(--radius-s);
+	/* Set per item from lanes_color / lanes_bucket_color; falls back to the theme accent. */
+	--bl-color: var(--bl-item-color, var(--interactive-accent));
+	background: color-mix(in srgb, var(--bl-color) 28%, var(--background-primary));
+	border: 1px solid var(--bl-color);
+	color: var(--text-normal);
+	cursor: pointer;
+	z-index: 2;
+}
+.bl-item:hover,
+.bl-item.is-linked-hover {
+	background: color-mix(in srgb, var(--bl-color) 48%, var(--background-primary));
+}
+.bl-item-label {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	min-width: 0;
+	height: 100%;
+	padding: 0 6px;
+}
+.bl-item-title,
+.bl-item-prop {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.bl-item-title {
+	line-height: 22px;
+}
+.bl-item-prop {
+	line-height: 18px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+.bl-item-prop {
+	min-height: 18px;
+}
+.bl-item-prop .value-list-container {
+	display: inline;
+}
+.bl-item-prop .value-list-gap {
+	display: none;
+}
+.bl-item-prop .value-list-element:not(:last-of-type)::after {
+	content: ", ";
+	color: var(--text-muted);
+}
+.bl-item-prop .internal-link {
+	cursor: pointer;
+}
+.bl-item-prop .tag {
+	padding: 0 4px;
+	font-size: inherit;
+}
+
+.bl-empty {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+	pointer-events: none;
+}
+
+/* ---- Label column resize ---- */
+.bl-label-resize {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: calc(var(--bl-label-width) - 3px);
+	width: 7px;
+	cursor: col-resize;
+	z-index: 5;
+}
+.bl-label-resize:hover,
+.bl-root.is-resizing .bl-label-resize {
+	background: linear-gradient(to right, transparent 2px, var(--interactive-accent) 2px, var(--interactive-accent) 5px, transparent 5px);
+}
+.bl-root.is-resizing {
+	cursor: col-resize;
+}
+
+/* ---- Drag to move / resize ---- */
+.bl-handle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	cursor: ew-resize;
+	z-index: 1;
+}
+.bl-handle-start {
+	left: 0;
+}
+.bl-handle-end {
+	right: 0;
+}
+/* Grip line inside each draggable edge: faint while hovering the bar, solid on the edge itself. */
+.bl-handle::after {
+	content: "";
+	position: absolute;
+	top: 25%;
+	bottom: 25%;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--bl-color);
+	opacity: 0;
+	transition: opacity 120ms ease, width 120ms ease;
+}
+.bl-handle-start::after {
+	left: 2px;
+}
+.bl-handle-end::after {
+	right: 2px;
+}
+.bl-item:hover .bl-handle::after {
+	opacity: 0.5;
+}
+.bl-item .bl-handle:hover::after,
+.bl-root.is-resizing-item .bl-item.is-dragging .bl-handle::after {
+	opacity: 1;
+	width: 3px;
+}
+/* On narrow bars two handles would cover the whole bar; keep the end one so the middle stays grabbable. */
+.bl-item.is-narrow .bl-handle {
+	display: none;
+}
+/* Invisible grab margin so thin bars are easier to hit. */
+.bl-item::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -4px;
+	right: -4px;
+}
+/* Too narrow to show text: skip laying out the title and properties at all. */
+.bl-item.is-narrow .bl-item-label {
+	display: none;
+}
+.bl-item.is-dragging {
+	z-index: 10;
+	opacity: 0.85;
+	box-shadow: var(--shadow-s);
+}
+.bl-root.is-dragging-item,
+.bl-root.is-dragging-item * {
+	cursor: grabbing !important;
+}
+.bl-root.is-resizing-item,
+.bl-root.is-resizing-item * {
+	cursor: ew-resize !important;
+}
+/* The dragged bar is translated across lanes, so let it escape its track. */
+.bl-root.is-dragging-item .bl-lane-track {
+	overflow: visible;
+}
+.bl-lane.is-drop-target {
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+.bl-drag-tip {
+	position: absolute;
+	z-index: 20;
+	padding: 2px 6px;
+	white-space: pre;
+	pointer-events: none;
+	font-size: var(--font-ui-smaller);
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+}
+
+/* ---- Drag preview ---- */
+.bl-ghost,
+.bl-drop-preview {
+	position: absolute;
+	box-sizing: border-box;
+	border-radius: var(--radius-s);
+	pointer-events: none;
+}
+/* Where the bar started. */
+.bl-ghost {
+	border: 1px dashed var(--text-faint);
+	opacity: 0.6;
+	z-index: 1;
+}
+/* Where it will land (snapped). */
+.bl-drop-preview {
+	border: 2px dashed var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	z-index: 3;
+}
+
+/* ---- lanes_group sections ---- */
+.bl-group-header {
+	position: relative;
+	display: flex;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	cursor: pointer;
+	z-index: 4;
+}
+.bl-group-header:hover .bl-group-label {
+	color: var(--text-normal);
+}
+.bl-group-label {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: var(--bl-label-width);
+	box-sizing: border-box;
+	padding: 4px 8px;
+	overflow: hidden;
+	white-space: nowrap;
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	border-right: 1px solid var(--background-modifier-border);
+}
+.bl-group-chevron {
+	display: flex;
+	transition: transform 120ms ease;
+}
+.bl-group-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+.bl-group-header.is-collapsed .bl-group-chevron {
+	transform: rotate(-90deg);
+}
+.bl-group-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.bl-group-count {
+	font-weight: normal;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+.bl-group-track {
+	flex: 1;
+}
+
+/* ---- Pending saves (slow or unreachable drive) ---- */
+.bl-item.is-saving {
+	border-style: dashed;
+	background-image: repeating-linear-gradient(
+		-45deg,
+		transparent 0 6px,
+		color-mix(in srgb, var(--bl-color) 35%, transparent) 6px 12px
+	);
+}
+.bl-item.is-save-failed {
+	border: 2px dashed var(--text-error);
+	background-image: repeating-linear-gradient(
+		-45deg,
+		transparent 0 6px,
+		color-mix(in srgb, var(--text-error) 30%, transparent) 6px 12px
+	);
+}
+.bl-notice-buttons {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+/* ---- Row names that link to a note ---- */
+.bl-lane-link {
+	color: var(--link-color);
+	cursor: pointer;
+}
+.bl-lane-link:hover {
+	text-decoration: underline;
+}
+
+/* ---- Create by dragging on an empty row ---- */
+.bl-lane-track {
+	cursor: crosshair;
+}
+.bl-create-preview {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px dashed var(--interactive-accent);
+	border-radius: var(--radius-s);
+	background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+	pointer-events: none;
+	z-index: 3;
+}
