@@ -107,10 +107,12 @@
 }
 .bl-lane-label {
 	flex: none;
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
 	width: var(--bl-label-width);
 	padding: 6px 8px;
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-weight: var(--font-semibold);
 	border-right: 1px solid var(--background-modifier-border);
@@ -430,4 +432,32 @@
 	background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
 	pointer-events: none;
 	z-index: 3;
+}
+
+/* ---- Row metrics (script) ---- */
+.bl-lane-label-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.bl-lane-metric {
+	flex: none;
+	margin-left: auto;
+	font-weight: normal;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+.bl-lane-metric:empty {
+	display: none;
+}
+.bl-lane-metric.is-error {
+	color: var(--text-error);
+	font-weight: var(--font-bold);
+	cursor: help;
+}
+.bl-settings-status {
+	padding: 0 0 var(--size-4-2);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
 }

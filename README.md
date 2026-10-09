@@ -44,6 +44,48 @@ Each can be a property on the note or a base formula of the same name (the formu
 
 Checked properties (toolbar **Properties**) are shown as lines under the bar's title.
 
+## Row metrics
+
+A small column beside each row name can show anything you compute from that row's notes: coverage, overlap,
+hours booked, a count. Metrics are plain JavaScript functions in a file in your vault.
+
+1. Create a `.js` file, e.g. `_lanes/metrics.js` (start from [examples/metrics.js](examples/metrics.js)).
+2. In Settings → Bases Lanes, turn on **Enable metrics script** and enter the file's path.
+3. In a Lanes view's options, choose the function under **Row metric**.
+
+Each exported function is called as `fn(notes, ctx)` for every row on screen, and for each `lanes_group`
+section header with all of that section's notes:
+
+```js
+module.exports = {
+	count(notes, ctx) {
+		return notes.filter((n) => n.end > ctx.windowStart && n.start < ctx.windowEnd).length;
+	},
+};
+```
+
+| `notes[i]` | |
+|---|---|
+| `start`, `end` | Times in ms. `end` is exclusive: a date-only end covers its whole day |
+| `dateOnly` | The start has no time of day |
+| `file`, `path`, `name` | The note's file, path and name |
+| `get(name)` | A property as plain JS (number, string, boolean, Date, array or null). A bare name reads the formula of that name, then the note property; `note.x`, `formula.x` and `file.x` are explicit |
+
+| `ctx` | |
+|---|---|
+| `windowStart`, `windowEnd` | The visible time range, in ms |
+| `scope` | `"row"` or `"group"` (section header) |
+| `row`, `link`, `group` | The row name and its link target, or the section name |
+| `app`, `moment` | Obsidian's app and moment.js |
+
+Return a string or number, or `{ text, tooltip, color }`. Return `null` or `""` to show nothing. Metrics are
+recomputed when the data changes, when the script file is saved, and shortly after you stop panning or zooming.
+A function that throws shows a red `!` with the error as its tooltip.
+
+The script runs with the same access as a plugin, so it is off until enabled in settings. Only enable it if you
+trust everyone who can edit that file. The setting is saved in the vault's `.obsidian` folder, so it is shared
+with anyone who shares that folder.
+
 ## Slow or unreliable drives
 
 Saves run in the background. A save that is still running is shown striped; after a few seconds a notice

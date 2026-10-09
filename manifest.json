@@ -1,7 +1,7 @@
 {
 	"id": "bases-lanes",
 	"name": "Bases Lanes",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"minAppVersion": "1.10.0",
 	"description": "Timeline view for Bases where rows come from the native group-by, list values put a note in several rows, and each row holds many items.",
 	"author": "Gabriel Ziebol",

@@ -8,6 +8,9 @@ import { formatEnd, moveGroupValue, rawKey, shiftParsed, snapDrag } from "./drag
 import type { DragMode, DragResult } from "./drag";
 import { addGroup, ALL_KEY, buildLanes, cleanLabel, getNativeGroupBy, NO_VALUE_KEY } from "./layout";
 import type { GroupBy, Lane, LaneItem, Timed } from "./layout";
+import type BasesLanesPlugin from "./main";
+import { describeResult, errorText, makeNote } from "./metrics";
+import type { MetricContext, MetricNote, MetricResult } from "./metrics";
 
 export const VIEW_TYPE = "lanes-timeline";
 
@@ -72,7 +75,13 @@ interface LaneRender {
 	/** Cached layout (relative to the lanes container); refreshed when dirty. */
 	top: number;
 	height: number;
+	/** Row metric cell, and the inputs it was last computed for. */
+	metricEl: HTMLElement;
+	metricKey: string;
 }
+
+/** Delay after the last pan, zoom or scroll before row metrics are recomputed. */
+const METRIC_SETTLE_MS = 200;
 
 const NO_GROUP_KEY = "\u0000nogroup";
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -221,7 +230,14 @@ export class LanesView extends BasesView implements HoverParent {
 	private hasViewport = false;
 	private frame = 0;
 
-	constructor(controller: QueryController, containerEl: HTMLElement) {
+	/** Bumped when lanes are rebuilt or the script changes: invalidates metric cells. */
+	private metricGen = 0;
+	private metricTimer = 0;
+	private headerMetrics: { section: Section; el: HTMLElement; key: string }[] = [];
+	private metricNotes = new WeakMap<Timed, MetricNote>();
+	private metricSlowWarned = false;
+
+	constructor(controller: QueryController, containerEl: HTMLElement, private plugin: BasesLanesPlugin) {
 		super(controller);
 		this.rootEl = containerEl.createDiv({ cls: "bl-root" });
 
@@ -256,6 +272,11 @@ export class LanesView extends BasesView implements HoverParent {
 		this.register(() => ro.disconnect());
 		this.register(() => cancelAnimationFrame(this.frame));
 		this.register(() => window.clearTimeout(this.zoomSettleTimer));
+		this.plugin.views.add(this);
+		this.register(() => {
+			this.plugin.views.delete(this);
+			window.clearTimeout(this.metricTimer);
+		});
 	}
 
 	onDataUpdated(): void {
@@ -316,6 +337,7 @@ export class LanesView extends BasesView implements HoverParent {
 	private clearLanes(): void {
 		this.lanesEl.querySelectorAll(".bl-lane, .bl-group-header").forEach((el) => el.remove());
 		this.laneRenders = [];
+		this.headerMetrics = [];
 		this.attached.clear();
 		this.dragPreview = null;
 		this.laneLayoutDirty = true;
@@ -360,6 +382,7 @@ export class LanesView extends BasesView implements HoverParent {
 		setIcon(label.createSpan({ cls: "bl-group-chevron" }), "chevron-down");
 		label.createSpan({ cls: "bl-group-name", text: section.name ?? "(no group)" });
 		label.createSpan({ cls: "bl-group-count", text: String(section.lanes.length) });
+		this.headerMetrics.push({ section, el: label.createSpan({ cls: "bl-lane-metric" }), key: "" });
 		header.createDiv({ cls: "bl-group-track" });
 		header.setAttr("aria-expanded", String(!collapsed));
 		header.addEventListener("click", () => this.toggleGroup(key));
@@ -376,6 +399,7 @@ export class LanesView extends BasesView implements HoverParent {
 		// Keyed by path, so a note rendered in several lanes gets the same color in each.
 		this.renderCtx = { colors: assignColors(this.data.data), props, itemHeight };
 
+		this.metricGen++;
 		const sections = toSections(lanes, this.groupDescending);
 		const grouped = sections.length > 1 || sections[0]?.name !== null;
 		for (const section of sections) {
@@ -392,6 +416,7 @@ export class LanesView extends BasesView implements HoverParent {
 		const textEl = labelEl.createSpan({ cls: "bl-lane-label-text", text: lane.label });
 		if (lane.link) this.linkLabel(labelEl, textEl, lane.link);
 		labelEl.setAttr("title", lane.label);
+		const metricEl = labelEl.createSpan({ cls: "bl-lane-metric" });
 		const trackEl = laneEl.createDiv({ cls: "bl-lane-track" });
 		const canvasEl = trackEl.createDiv({ cls: "bl-lane-canvas" });
 		trackEl.style.height = `${lane.trackCount * (itemHeight + ITEM_GAP) - ITEM_GAP + LANE_PAD * 2}px`;
@@ -399,7 +424,7 @@ export class LanesView extends BasesView implements HoverParent {
 		const sorted = [...lane.items].sort((a, b) => a.start - b.start);
 		let maxDuration = 0;
 		for (const item of sorted) maxDuration = Math.max(maxDuration, item.end - item.start);
-		this.laneRenders.push({ lane, el: laneEl, trackEl, canvasEl, sorted, maxDuration, items: new Map(), top: 0, height: 0 });
+		this.laneRenders.push({ lane, el: laneEl, trackEl, canvasEl, sorted, maxDuration, items: new Map(), top: 0, height: 0, metricEl, metricKey: "" });
 	}
 
 	private materialize(lr: LaneRender, item: LaneItem): RenderedItem {
@@ -1182,10 +1207,12 @@ export class LanesView extends BasesView implements HoverParent {
 		this.lanesEl.querySelectorAll<HTMLElement>(".bl-lane-label").forEach((el) => {
 			const text = el.querySelector<HTMLElement>(".bl-lane-label-text");
 			if (!text) return;
-			// The span is inline, so its width is the text's own width, not the column's.
+			// scrollWidth is the text's full width even when it's cut off.
 			const style = getComputedStyle(el);
 			const chrome = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth);
-			widest = Math.max(widest, Math.ceil(text.getBoundingClientRect().width + chrome) + 2);
+			const metric = el.querySelector<HTMLElement>(".bl-lane-metric");
+			const metricWidth = metric && metric.textContent ? metric.getBoundingClientRect().width + parseFloat(style.columnGap || "0") : 0;
+			widest = Math.max(widest, Math.ceil(text.scrollWidth + metricWidth + chrome) + 2);
 		});
 		if (widest === 0) return;
 		this.setLabelWidth(widest);
@@ -1472,6 +1499,95 @@ export class LanesView extends BasesView implements HoverParent {
 		const now = toX(Date.now());
 		this.todayEl.toggle(now >= 0 && now <= width);
 		this.todayEl.style.left = `${now}px`;
+		this.scheduleMetrics();
+	}
+
+	// ---- Row metrics ------------------------------------------------------
+
+	/** The metrics script was (re)loaded: recompute every cell. */
+	refreshMetrics(): void {
+		this.metricGen++;
+		this.scheduleMetrics();
+	}
+
+	private scheduleMetrics(): void {
+		window.clearTimeout(this.metricTimer);
+		this.metricTimer = window.setTimeout(() => this.computeMetrics(), METRIC_SETTLE_MS);
+	}
+
+	/**
+	 * Run the view's metric function for the rows on screen (and every section
+	 * header), for the visible time range. A cell is only recomputed when its
+	 * inputs change: new data, a new script, or a different time range.
+	 */
+	private computeMetrics(): void {
+		if (this.pointerBusy || this.laneLayoutDirty) return this.scheduleMetrics();
+		const { settings, script } = this.plugin;
+		const name = String(this.config.get("rowMetric") ?? "");
+		const active = settings.enableScripts && name.length > 0;
+		const fn = active ? script.fns[name] : undefined;
+		const missing = active && !fn ? (script.error ?? `No function "${name}" in the metrics script.`) : null;
+		const windowStart = this.viewStart;
+		const windowEnd = this.viewStart + this.trackWidth * this.msPerPx;
+		const key = active ? `${this.metricGen}:${windowStart}:${windowEnd}` : "off";
+		this.rootEl.toggleClass("has-metrics", active);
+
+		const began = performance.now();
+		const run = (el: HTMLElement, timed: Timed[], ctx: Pick<MetricContext, "scope" | "row" | "link" | "group">) => {
+			el.removeClass("is-error");
+			el.style.color = "";
+			el.removeAttribute("title");
+			el.setText("");
+			if (!active) return;
+			let shown = { text: "!", tooltip: missing as string | null, color: null as string | null };
+			let failed = !fn;
+			if (fn) {
+				try {
+					const notes = timed.map((t) => this.metricNote(t));
+					const result: MetricResult = fn(notes, { ...ctx, windowStart, windowEnd, app: this.app, moment });
+					shown = describeResult(result);
+				} catch (e) {
+					shown = { text: "!", tooltip: errorText(e), color: null };
+					failed = true;
+				}
+			}
+			el.toggleClass("is-error", failed);
+			el.setText(shown.text);
+			if (shown.tooltip) el.setAttr("title", shown.tooltip);
+			if (shown.color) el.style.color = shown.color;
+		};
+
+		const top = this.bodyEl.scrollTop - OVERSCAN_PX;
+		const bottom = this.bodyEl.scrollTop + this.bodyEl.clientHeight + OVERSCAN_PX;
+		for (const lr of this.laneRenders) {
+			if (lr.metricKey === key) continue;
+			if (active && (lr.top + lr.height < top || lr.top > bottom)) continue;
+			lr.metricKey = key;
+			const { lane } = lr;
+			run(lr.metricEl, lane.items.map((i) => i.timed), { scope: "row", row: lane.label, link: lane.link, group: null });
+		}
+		for (const h of this.headerMetrics) {
+			if (h.key === key) continue;
+			h.key = key;
+			const byPath = new Map<string, Timed>();
+			for (const lane of h.section.lanes) for (const i of lane.items) byPath.set(i.entry.file.path, i.timed);
+			run(h.el, [...byPath.values()], { scope: "group", row: null, link: null, group: h.section.name });
+		}
+
+		const took = performance.now() - began;
+		if (took > 200 && !this.metricSlowWarned) {
+			this.metricSlowWarned = true;
+			console.warn(`Bases Lanes: row metric "${name}" took ${Math.round(took)}ms for the visible rows.`);
+		}
+	}
+
+	private metricNote(timed: Timed): MetricNote {
+		let note = this.metricNotes.get(timed);
+		if (!note) {
+			note = makeNote(timed);
+			this.metricNotes.set(timed, note);
+		}
+		return note;
 	}
 
 	/** Faint Sat–Sun bands behind the bars, so weeks stand out. */
