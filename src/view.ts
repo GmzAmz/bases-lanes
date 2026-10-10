@@ -1,7 +1,7 @@
 import { BasesView, Keymap, Menu, moment, Notice, setIcon, TFile } from "obsidian";
 import type { BasesEntry, BasesPropertyId, HoverParent, HoverPopover, QueryController, Value } from "obsidian";
 import { computeTicks } from "./axis";
-import { assignColors, GROUP_PROPERTY, readNamed, TITLE_PROPERTY, valueToText } from "./colors";
+import { assignColors, readProp, valueToText } from "./colors";
 import { DAY_MS, declaredType, formatParsed, newValueFormat, parseRaw, readTime } from "./dates";
 import type { ParsedTime } from "./dates";
 import { formatEnd, moveGroupValue, rawKey, shiftParsed, snapDrag } from "./drag";
@@ -87,13 +87,13 @@ const NO_GROUP_KEY = "\u0000nogroup";
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 interface Section {
-	/** lanes_group value; null for rows without one. */
+	/** Section name; null for rows without one. */
 	name: string | null;
 	lanes: Lane[];
 }
 
 /**
- * Split lanes into lanes_group sections, sorted by name; rows without a group go
+ * Split lanes into sections, sorted by name; rows without a group go
  * last. A row with several groups appears in each of their sections.
  */
 function toSections(lanes: Lane[], descending: boolean): Section[] {
@@ -200,9 +200,10 @@ export class LanesView extends BasesView implements HoverParent {
 	private renderCtx: { colors: Map<string, string>; props: BasesPropertyId[]; itemHeight: number } | null = null;
 	private lastLanes: Lane[] = [];
 	private groupDescending = false;
-	/** Collapsed lanes_group sections, persisted in the view config. */
+	/** Collapsed sections, persisted in the view config. */
 	private collapsed = new Set<string>();
 	private writable: Writable = { start: null, end: null, group: null };
+	private titleProp: BasesPropertyId | null = null;
 	private tipEl: HTMLElement;
 	/** Live position of the bar being dragged, so re-positioning doesn't undo it. */
 	private dragPreview: DragPreview | null = null;
@@ -298,12 +299,13 @@ export class LanesView extends BasesView implements HoverParent {
 		const groupBy: GroupBy | null = getNativeGroupBy(this.config);
 		this.writable = { start: noteName(startProp), end: noteName(endProp), group: noteName(groupBy?.property) };
 
+		this.titleProp = this.config.getAsPropertyId("title");
 		const timeOf = (entry: BasesEntry): Timed | null => this.timeOf(entry, startProp, endProp);
 		// Avoid groupedData when the group-by is known: see EntrySource.
 		const source = groupBy
 			? [{ key: null, entries: this.data.data }]
 			: this.data.groupedData.map((g) => ({ key: g.hasKey() ? (g.key ?? null) : null, entries: g.entries }));
-		const lanes = buildLanes(source, groupBy, timeOf);
+		const lanes = buildLanes(source, groupBy, timeOf, this.config.getAsPropertyId("sections"));
 
 		if (lanes.length === 0) {
 			this.showEmpty("No notes with a start date.");
@@ -352,15 +354,18 @@ export class LanesView extends BasesView implements HoverParent {
 
 	/** Build lane skeletons only; items are created on demand in position(). */
 	/**
-	 * Rows that got no lanes_group from their notes fall back to the note the row
-	 * links to: a person row reads `lanes_group` from that person's note.
+	 * When the sections option is a note property, rows that got no section from
+	 * their notes fall back to the note the row links to: with `department`, a
+	 * person row reads `department` from that person's note.
 	 */
 	private fillGroupsFromLinkedNotes(lanes: Lane[]): void {
+		const name = noteName(this.config.getAsPropertyId("sections"));
+		if (!name) return;
 		const { metadataCache } = this.app;
 		for (const lane of lanes) {
 			if (lane.groups.length > 0 || lane.key === ALL_KEY || lane.key === NO_VALUE_KEY) continue;
 			const file = metadataCache.getFirstLinkpathDest(lane.label, "");
-			const raw: unknown = file ? metadataCache.getFileCache(file)?.frontmatter?.[GROUP_PROPERTY] : undefined;
+			const raw: unknown = file ? metadataCache.getFileCache(file)?.frontmatter?.[name] : undefined;
 			for (const value of Array.isArray(raw) ? raw : [raw]) {
 				if (value !== undefined && value !== null && String(value).trim() !== "") addGroup(lane, cleanLabel(String(value)));
 			}
@@ -397,7 +402,8 @@ export class LanesView extends BasesView implements HoverParent {
 		const props = this.config.getOrder().filter((p) => p !== "file.name" && p !== "file.basename");
 		const itemHeight = ITEM_HEIGHT + props.length * PROP_LINE_HEIGHT;
 		// Keyed by path, so a note rendered in several lanes gets the same color in each.
-		this.renderCtx = { colors: assignColors(this.data.data), props, itemHeight };
+		const colors = assignColors(this.data.data, this.config.getAsPropertyId("color"), this.config.getAsPropertyId("colorBucket"));
+		this.renderCtx = { colors, props, itemHeight };
 
 		this.metricGen++;
 		const sections = toSections(lanes, this.groupDescending);
@@ -743,9 +749,9 @@ export class LanesView extends BasesView implements HoverParent {
 
 	// ---- Title, row links ----------------------------------------------
 
-	/** Bar title: `lanes_title` (formula first, then property) or the file name. */
+	/** Bar title: the view's title property or formula, else the file name. */
 	private titleOf(entry: BasesEntry): string {
-		const value = readNamed(entry, TITLE_PROPERTY);
+		const value = readProp(entry, this.titleProp);
 		const text = value ? valueToText(value) : "";
 		return text.length > 0 ? text : entry.file.basename;
 	}

@@ -1,7 +1,7 @@
 import { ListValue, NullValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { ParsedTime } from "./dates";
-import { GROUP_PROPERTY, readNamed, valueToText } from "./colors";
+import { readProp, valueToText } from "./colors";
 
 export interface LaneItem {
 	/** Unique per rendered copy: `path::rowKey`. */
@@ -21,7 +21,7 @@ export interface Lane {
 	label: string;
 	items: LaneItem[];
 	trackCount: number;
-	/** Sections this row is shown under (from lanes_group); empty for none. */
+	/** Sections this row is shown under (from the view's sections option); empty for none. */
 	groups: string[];
 	/** Link target when the row's value is a link (e.g. a person note), else null. */
 	link: string | null;
@@ -132,6 +132,8 @@ export function buildLanes(
 	groups: EntrySource[],
 	groupBy: GroupBy | null,
 	timeOf: (entry: BasesEntry) => Timed | null,
+	/** View option "Row sections": the property or formula that groups rows. */
+	sectionProp: BasesPropertyId | null = null,
 ): Lane[] {
 	const lanes = new Map<string, Lane>();
 	const getLane = (key: string, label: string): Lane => {
@@ -167,10 +169,10 @@ export function buildLanes(
 				if (labels.length === 0) labels = [group.key ? NO_VALUE_KEY : ALL_KEY];
 			}
 
-			// lanes_group: a list the same length as the group-by values pairs up by
+			// Sections: a list the same length as the group-by values pairs up by
 			// position (e.g. each assignee's departments); anything else applies to all.
 			// Any value, or paired element, may itself be a list: the row joins every group.
-			const groupValue = readNamed(entry, GROUP_PROPERTY);
+			const groupValue = readProp(entry, sectionProp);
 			const perLabel = groupValue instanceof ListValue && groupValue.length() === labels.length;
 			const groupsFor = (i: number): string[] => {
 				if (!groupValue) return [];

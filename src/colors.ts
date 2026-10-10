@@ -2,26 +2,16 @@ import { ListValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, Value } from "obsidian";
 import { getPalette } from "./palette";
 
-export const COLOR_PROPERTY = "lanes_color";
-export const BUCKET_PROPERTY = "lanes_bucket_color";
-export const GROUP_PROPERTY = "lanes_group";
-export const TITLE_PROPERTY = "lanes_title";
-
-/**
- * Read a property, preferring a base formula of that name over the note's own
- * frontmatter. This lets a base define e.g. `lanes_color: color` or
- * `lanes_bucket_color: file.tags` without touching the notes.
- */
-export function readNamed(entry: BasesEntry, name: string): Value | null {
-	for (const prefix of ["formula", "note"]) {
-		try {
-			const value = entry.getValue(`${prefix}.${name}` as BasesPropertyId);
-			if (value && value.isTruthy()) return value;
-		} catch {
-			// Formula not defined in this base, or it errored: fall through.
-		}
+/** Read a property or formula chosen in the view options; null when unset or empty. */
+export function readProp(entry: BasesEntry, prop: BasesPropertyId | null): Value | null {
+	if (!prop) return null;
+	try {
+		const value = entry.getValue(prop);
+		return value && value.isTruthy() ? value : null;
+	} catch {
+		// Formula removed from the base, or it errored.
+		return null;
 	}
-	return null;
 }
 
 export function valueToText(value: Value): string {
@@ -38,12 +28,13 @@ function isCssColor(text: string): boolean {
 }
 
 /**
- * Resolve colors for a whole result set. A note's own `lanes_color` wins;
- * otherwise each distinct `lanes_bucket_color` value takes the next palette
- * color, in the order the values first appear in `entries` (the base's sort).
- * Notes with neither are left out, so they keep the theme accent.
+ * Resolve colors for a whole result set. A note's color property wins;
+ * otherwise each distinct color-bucket value takes the next palette color, in
+ * the order the values first appear in `entries` (the base's sort). Notes with
+ * neither are left out, so they keep the theme accent.
  */
-export function assignColors(entries: BasesEntry[]): Map<string, string> {
+export function assignColors(entries: BasesEntry[], colorProp: BasesPropertyId | null, bucketProp: BasesPropertyId | null): Map<string, string> {
+	if (!colorProp && !bucketProp) return new Map();
 	const palette = getPalette();
 	const buckets = new Map<string, string>();
 	const colors = new Map<string, string>();
@@ -52,7 +43,7 @@ export function assignColors(entries: BasesEntry[]): Map<string, string> {
 		const path = entry.file.path;
 		if (colors.has(path)) continue;
 
-		const manual = readNamed(entry, COLOR_PROPERTY);
+		const manual = readProp(entry, colorProp);
 		if (manual) {
 			const text = valueToText(manual);
 			if (isCssColor(text)) {
@@ -61,7 +52,7 @@ export function assignColors(entries: BasesEntry[]): Map<string, string> {
 			}
 		}
 
-		const bucket = readNamed(entry, BUCKET_PROPERTY);
+		const bucket = readProp(entry, bucketProp);
 		const key = bucket ? valueToText(bucket).toLowerCase() : "";
 		if (key.length === 0) continue;
 		let color = buckets.get(key);

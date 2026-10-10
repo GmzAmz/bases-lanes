@@ -31,16 +31,17 @@ date or date-and-time.
 Date-only values snap to whole days; date-and-time values snap to whole hours and keep their minutes.
 Values are written back in the format they were read in.
 
-## Properties the view understands
+## View options
 
-Each can be a property on the note or a base formula of the same name (the formula wins).
+Under the view's options, **Display** has four optional pickers. Each takes any note property, file property or
+base formula, set separately for each view.
 
-| Name | Effect |
+| Option | Effect |
 |---|---|
-| `lanes_title` | Text shown on the bar instead of the file name, e.g. `'"[" + status + "] " + file.basename'` |
-| `lanes_color` | Any CSS colour for the bar |
-| `lanes_bucket_color` | Notes with the same value get the same colour from a fixed palette, e.g. `file.tags` |
-| `lanes_group` | Groups rows into collapsible sections, e.g. `assigned.map(value.asFile().properties.department)`. A list puts a row in several sections |
+| Bar title | Text shown on the bar instead of the file name, e.g. a formula `'"[" + status + "] " + file.basename'` |
+| Bar color | Any CSS colour for the bar. Wins over **Color by** |
+| Color by | Notes with the same value get the same colour from a fixed palette, e.g. `file.tags` |
+| Row sections | Groups rows into collapsible sections, e.g. a formula `assigned.map(value.asFile().properties.department)`. A list puts a row in several sections. With a note property (e.g. `department`), a row that gets no section from its notes reads that property from the note the row links to, such as the person's own note |
 
 Checked properties (toolbar **Properties**) are shown as lines under the bar's title.
 
@@ -53,7 +54,7 @@ hours booked, a count. Metrics are plain JavaScript functions in a file in your 
 2. In Settings → Bases Lanes, turn on **Enable metrics script** and enter the file's path.
 3. In a Lanes view's options, choose the function under **Row metric**.
 
-Each exported function is called as `fn(notes, ctx)` for every row on screen, and for each `lanes_group`
+Each exported function is called as `fn(notes, ctx)` for every row on screen, and for each row
 section header with all of that section's notes:
 
 ```js

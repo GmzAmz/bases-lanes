@@ -56,6 +56,36 @@ export default class BasesLanesPlugin extends Plugin {
 						displayName: "Shade weekends",
 						default: true,
 					},
+					{
+						type: "group",
+						displayName: "Display",
+						items: [
+							{
+								type: "property",
+								key: "title",
+								displayName: "Bar title",
+								placeholder: "File name",
+							},
+							{
+								type: "property",
+								key: "color",
+								displayName: "Bar color",
+								placeholder: "Property (any CSS color)",
+							},
+							{
+								type: "property",
+								key: "colorBucket",
+								displayName: "Color by",
+								placeholder: "Property (same value, same color)",
+							},
+							{
+								type: "property",
+								key: "sections",
+								displayName: "Row sections",
+								placeholder: "Property (collapsible sections)",
+							},
+						],
+					},
 				];
 				const names = Object.keys(this.script.fns);
 				if (this.settings.enableScripts && names.length > 0) {

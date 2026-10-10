@@ -20,7 +20,7 @@ export interface MetricContext {
 	/** Visible time range, in ms. */
 	windowStart: number;
 	windowEnd: number;
-	/** "row" for a row, "group" for a lanes_group section header. */
+	/** "row" for a row, "group" for a section header. */
 	scope: "row" | "group";
 	/** Row name (scope "row"), else null. */
 	row: string | null;
